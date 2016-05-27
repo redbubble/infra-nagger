@@ -1,0 +1,16 @@
+{
+  "name": "infra-nagger",
+  "version": "0.0.1",
+  "description": "Nag about broken infrastructure specs",
+  "main": "app.js",
+  "author": "Tom",
+  "dependencies": {
+    "@slack/client": "^3.3.0",
+    "express": "^4.13.3",
+    "body-parser": "^1.14.1"
+  },
+  "devDependencies": {
+  },
+  "scripts": {
+  }
+}
