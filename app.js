@@ -3,7 +3,12 @@ var buildkiteToken = process.env.BUILDKITE_TOKEN;
 var slackBotToken = process.env.SLACK_BOT_TOKEN;
 
 // Slack Setup
-var slackChannel = "#deploy-prod";
+var slackChannelID = null;
+var postToChannel = function(text) {
+  console.log("Slack Bot sending: " + text);
+  bot.say({ text: text, channel: slackChannelID });
+}
+
 var Botkit = require("botkit");
 var controller = Botkit.slackbot();
 var bot = controller.spawn({
@@ -16,6 +21,24 @@ bot.startRTM(function(err, bot, payload) {
   }
 
   console.log("Slack Bot running");
+
+  // Get #deploy-prod channel id
+  bot.api.channels.list({}, function (err, response) {
+    if (response.hasOwnProperty("channels") && response.ok) {
+      var total = response.channels.length;
+      for (var i = 0; i < total; i++) {
+        var channel = response.channels[i];
+
+        if (channel.name === "deploy-prod") {
+          slackChannelID = channel.id;
+          console.log("Slack Channel ID: " + slackChannelID);
+
+          break;
+        }
+      }
+    }
+  });
+
 });
 
 // Express Setup
@@ -43,10 +66,11 @@ app.post("/build-finished", function(req, res) {
 
     console.log("Build finished: " + pipeline.slug + " -> " + build.state);
 
-    if (build.state == "passed") {
-      bot.say({ text: "cancel deploy-prod", channel: slackChannel });
+    if (build.state === "passed") {
+      postToChannel("cancel deploy-prod");
     } else {
-      bot.say({ text: "steal deploy-prod", channel: slackChannel });
+      postToChannel("steal deploy-prod");
+      postToChannel("infrastructure-specs are broken! Please fix before deploying to prod... :angry:");
     }
   }
 
