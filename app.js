@@ -69,7 +69,7 @@ app.post("/build-finished", function(req, res) {
     if (build.state === "passed") {
       postToChannel("cancel deploy-prod");
     } else {
-      postToChannel("steal deploy-prod");
+      postToChannel("sneak deploy-prod");
       postToChannel("infrastructure-specs are broken! Please fix before deploying to prod... :angry:");
     }
   }
