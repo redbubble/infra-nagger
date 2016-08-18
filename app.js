@@ -1,45 +1,50 @@
 // ENV
 var buildkiteToken = process.env.BUILDKITE_TOKEN;
-var slackBotToken = process.env.SLACK_BOT_TOKEN;
+var githubToken = process.env.GITHUB_TOKEN;
 
-// Slack Setup
-var slackChannelID = null;
-var postToChannel = function(text) {
-  console.log("Slack Bot sending: " + text);
-  bot.say({ text: text, channel: slackChannelID });
+// Github Setup
+var github = require("octonode");
+var ghClient = github.client(githubToken);
+var ghRepo = ghClient.repo("redbubble/redbubble");
+
+var updatePR = function(sha, state) {
+  console.log("Update PR:" + sha + " -> " + state);
+
+  ghRepo.status(sha, {
+    "state": state,
+    "target_url": "https://buildkite.com/redbubble/infrastructure-spec/builds?branch=master",
+    "context": "infra-specs",
+    "description": "Checking Infrastructure Specs"
+  }, function() {});
 }
 
-var Botkit = require("botkit");
-var controller = Botkit.slackbot();
-var bot = controller.spawn({
-  token: slackBotToken
-});
+// Buildkite Setup
+var buildnode = require("buildnode")({ accessToken: buildkiteToken });
 
-bot.startRTM(function(err, bot, payload) {
-  if (err) {
-    throw new Error("Could not connect to Slack: " + err);
-  }
-
-  console.log("Slack Bot running");
-
-  // Get #deploy-prod channel id
-  bot.api.channels.list({}, function (err, response) {
-    if (response.hasOwnProperty("channels") && response.ok) {
-      var total = response.channels.length;
-      for (var i = 0; i < total; i++) {
-        var channel = response.channels[i];
-
-        if (channel.name === "deploy-prod") {
-          slackChannelID = channel.id;
-          console.log("Slack Channel ID: " + slackChannelID);
-
-          break;
-        }
-      }
+var checkBuildStatus = function(callback) {
+  buildnode.getOrganization("redbubble", function (err, org) {
+    if (err || !org) {
+      console.log("Error fetching buildkite organisation");
+      return;
     }
-  });
 
-});
+    org.getPipeline("infrastructure-spec", function(err, pipeline) {
+      if (err || !pipeline) {
+        console.log("Error fetching buildkite pipeline");
+        return;
+      }
+
+      pipeline.listBuilds(function(err, builds) {
+        if (err || !builds) {
+          console.log("Error fetching buildkite builds");
+          return;
+        }
+
+        callback(builds[0].state);
+      });
+    });
+  });
+}
 
 // Express Setup
 var https      = require("https");
@@ -49,29 +54,22 @@ var bodyParser = require("body-parser");
 var app = express();
 app.use(bodyParser.json());
 
-// App
-app.post("/build-finished", function(req, res) {
-  console.log("Received POST on /build-finished", req.headers, req.body);
+app.post("/pr-updated", function(req, res) {
+  console.log("Received POST on /pr-updated", req.headers, req.body);
 
-  // Verify token
-  if (req.headers["x-buildkite-token"] != buildkiteToken) {
-    console.log("Invalid buildkite token");
-    return res.status(401).send("Invalid token");
+  // Verify Type
+  if (req.headers["x-github-event"] != "pull_request") {
+    console.log("No Github Signature");
+    return res.status(401).send("Signature Missing");
   }
 
-  var buildkiteEvent = req.headers["x-buildkite-event"];
-  if (buildkiteEvent == "build.finished") {
-    var build = req.body.build;
-    var pipeline = req.body.pipeline;
+  if (req.body.action === "opened" || req.body.action === "synchronize") {
+    var pr = req.body.pull_request;
 
-    console.log("Build finished: " + pipeline.slug + " -> " + build.state);
-
-    if (build.state === "passed") {
-      postToChannel("cancel deploy-prod");
-    } else {
-      postToChannel("sneak deploy-prod");
-      postToChannel("infrastructure-specs are broken! Please fix before deploying to prod... :angry:");
-    }
+    updatePR(pr.head.sha, "pending");
+    checkBuildStatus(function(state) {
+      updatePR(pr.head.sha, state === "passed" ? "success" : "failure");
+    });
   }
 
   res.send("AOK");
@@ -80,4 +78,3 @@ app.post("/build-finished", function(req, res) {
 app.listen(process.env.PORT || 3000, function() {
   console.log("Express listening on port", this.address().port);
 });
-
