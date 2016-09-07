@@ -68,8 +68,12 @@ app.post("/pr-updated", function(req, res) {
 
     updatePR(pr.head.sha, "pending");
     checkBuildStatus(function(state) {
+      // See https://buildkite.com/docs/api/builds#list-all-builds
+      // and https://developer.github.com/v3/activity/events/types/#statusevent
       if (state === "passed") {
         prStatus = "success"
+      } else if (state === "running") {
+        prStatus = "pending"
       } else {
         prStatus = "failure"
       }
