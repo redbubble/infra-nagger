@@ -63,12 +63,24 @@ app.post("/pr-updated", function(req, res) {
     return res.status(401).send("Signature Missing");
   }
 
-  if (req.body.action === "opened" || req.body.action === "synchronize") {
+  if (req.body.action === "opened" ||
+      req.body.action === "synchronize" ||
+      req.body.action === "edited") {
+
     var pr = req.body.pull_request;
 
     updatePR(pr.head.sha, "pending");
     checkBuildStatus(function(state) {
-      updatePR(pr.head.sha, state === "passed" ? "success" : "failure");
+      // See https://buildkite.com/docs/api/builds#list-all-builds
+      // and https://developer.github.com/v3/activity/events/types/#statusevent
+      if (state === "passed") {
+        prStatus = "success"
+      } else if (state === "running") {
+        prStatus = "pending"
+      } else {
+        prStatus = "failure"
+      }
+      updatePR(pr.head.sha, prStatus);
     });
   }
 
