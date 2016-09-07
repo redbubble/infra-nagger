@@ -63,7 +63,10 @@ app.post("/pr-updated", function(req, res) {
     return res.status(401).send("Signature Missing");
   }
 
-  if (req.body.action === "opened" || req.body.action === "synchronize") {
+  if (req.body.action === "opened" ||
+      req.body.action === "synchronize" ||
+      req.body.action === "edited") {
+
     var pr = req.body.pull_request;
 
     updatePR(pr.head.sha, "pending");
