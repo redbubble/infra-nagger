@@ -68,7 +68,12 @@ app.post("/pr-updated", function(req, res) {
 
     updatePR(pr.head.sha, "pending");
     checkBuildStatus(function(state) {
-      updatePR(pr.head.sha, state === "passed" ? "success" : "failure");
+      if (state === "passed") {
+        prStatus = "success"
+      } else {
+        prStatus = "failure"
+      }
+      updatePR(pr.head.sha, prStatus);
     });
   }
 
